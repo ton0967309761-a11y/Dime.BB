@@ -320,7 +320,7 @@
                 </div>
 
                 <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] text-gray-500 flex justify-between items-center">
-                    <span>* บันทึกข้อมูลลงใน LocalStorage ของอุปกรณ์โดยอัตโนมัติ</span>
+                    <span>* บันทึกในเครื่องและซิงก์ขึ้น Firebase อัตโนมัติ · <span id="firebase-sync-status" class="text-amber-400">กำลังเชื่อมต่อ Firebase…</span></span>
                     <button onclick="clearAllData()" class="text-gray-500 hover:text-red-400 flex items-center gap-1 transition">
                         <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> ล้างข้อมูลทั้งหมด
                     </button>
@@ -422,15 +422,17 @@
         </div>
     </div>
 
-    <!-- Firebase SDK and Configuration -->
+    <!-- Firebase Realtime Database + silent anonymous auth (no login UI) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getDatabase, ref, get, set, onValue } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
 
-        // Firebase configuration provided by the user
         const firebaseConfig = {
           apiKey: "AIzaSyB9yViN00qo07YDc3UzKFqCg3ZylQx8iKo",
           authDomain: "dimebb.firebaseapp.com",
+          databaseURL: "https://dimebb-default-rtdb.asia-southeast1.firebasedatabase.app",
           projectId: "dimebb",
           storageBucket: "dimebb.firebasestorage.app",
           messagingSenderId: "47618069798",
@@ -439,11 +441,122 @@
         };
 
         const firebaseApp = initializeApp(firebaseConfig);
-        try {
-            getAnalytics(firebaseApp);
-        } catch (error) {
+        const auth = getAuth(firebaseApp);
+        const database = getDatabase(firebaseApp);
+        const portfolioRef = ref(database, "singleUserPortfolio");
+        let cloudReady = false;
+        let lastAppliedJson = "";
+        let writeQueue = Promise.resolve();
+
+        try { getAnalytics(firebaseApp); } catch (error) {
             console.warn("Firebase Analytics is unavailable in this environment.", error);
         }
+
+        function readLocalArray(key, fallback) {
+            try {
+                const value = JSON.parse(localStorage.getItem(key) || "null");
+                return value && typeof value === "object" ? value : fallback;
+            } catch (_) { return fallback; }
+        }
+
+        function normalizePortfolio(value) {
+            return {
+                trades: Array.isArray(value?.trades) ? value.trades : [],
+                stocksCatalog: value?.stocksCatalog && typeof value.stocksCatalog === "object" ? value.stocksCatalog : {},
+                updatedAt: Number(value?.updatedAt) || Date.now()
+            };
+        }
+
+        function queueCloudWrite(data) {
+            if (!cloudReady) return;
+            const payload = normalizePortfolio(data);
+            payload.updatedAt = Date.now();
+            const json = JSON.stringify(payload);
+            if (json === lastAppliedJson) return;
+            lastAppliedJson = json;
+            writeQueue = writeQueue.then(() => set(portfolioRef, payload)).catch(error => {
+                console.error("Firebase save failed:", error);
+                setFirebaseStatus("บันทึกขึ้นคลาวด์ไม่สำเร็จ — ตรวจสอบ Rules", false);
+            });
+        }
+
+        window.savePortfolioToFirebase = () => {
+            if (!cloudReady) return;
+            queueCloudWrite({
+                trades: readLocalArray("multi_stock_trades", []),
+                stocksCatalog: readLocalArray("multi_stock_catalog", {}),
+                updatedAt: Date.now()
+            });
+        };
+
+        function setFirebaseStatus(message, connected) {
+            const status = document.getElementById("firebase-sync-status");
+            if (status) {
+                status.textContent = message;
+                status.className = connected ? "text-emerald-400" : "text-amber-400";
+            }
+        }
+
+        async function startFirebaseSync() {
+            setFirebaseStatus("กำลังเชื่อมต่อ Firebase…", false);
+            try {
+                // Anonymous authentication runs in the background; the user does not need to log in.
+                await signInAnonymously(auth);
+                const localTrades = readLocalArray("multi_stock_trades", []);
+                const localCatalog = readLocalArray("multi_stock_catalog", {});
+                const snapshot = await get(portfolioRef);
+                let initial;
+
+                if (!snapshot.exists()) {
+                    // First device: migrate its existing LocalStorage data to the cloud.
+                    initial = normalizePortfolio({ trades: localTrades, stocksCatalog: localCatalog });
+                    await set(portfolioRef, initial);
+                } else {
+                    // Merge cloud + local records by trade ID so existing local data is not discarded.
+                    const cloud = normalizePortfolio(snapshot.val());
+                    const tradeMap = new Map();
+                    [...cloud.trades, ...localTrades].forEach(trade => {
+                        if (trade && trade.id !== undefined && trade.id !== null) tradeMap.set(String(trade.id), trade);
+                    });
+                    initial = normalizePortfolio({
+                        trades: Array.from(tradeMap.values()),
+                        stocksCatalog: { ...localCatalog, ...cloud.stocksCatalog },
+                        updatedAt: Date.now()
+                    });
+                    const currentJson = JSON.stringify(normalizePortfolio(snapshot.val()));
+                    const mergedJson = JSON.stringify(initial);
+                    if (currentJson !== mergedJson) await set(portfolioRef, initial);
+                }
+
+                cloudReady = true;
+                lastAppliedJson = JSON.stringify(normalizePortfolio(initial));
+                onValue(portfolioRef, snapshotNow => {
+                    if (!snapshotNow.exists()) return;
+                    const incoming = normalizePortfolio(snapshotNow.val());
+                    const incomingJson = JSON.stringify(incoming);
+                    if (incomingJson === lastAppliedJson) return;
+                    lastAppliedJson = incomingJson;
+                    if (typeof window.applyFirebasePortfolio === "function") {
+                        window.applyFirebasePortfolio(incoming);
+                    }
+                    setFirebaseStatus("ซิงก์ Firebase แล้ว", true);
+                }, error => {
+                    console.error("Firebase read failed:", error);
+                    setFirebaseStatus("อ่านข้อมูลคลาวด์ไม่สำเร็จ — ตรวจสอบ Rules", false);
+                });
+
+                if (typeof window.applyFirebasePortfolio === "function") window.applyFirebasePortfolio(initial);
+                setFirebaseStatus("เชื่อมต่อแล้ว · ซิงก์ข้ามอุปกรณ์", true);
+            } catch (error) {
+                console.error("Firebase initialization/sync failed:", error);
+                const message = error?.code === "auth/operation-not-allowed"
+                    ? "ต้องเปิด Anonymous ใน Firebase Authentication"
+                    : "เชื่อมต่อไม่ได้ — ตรวจสอบ Authentication และ Database Rules";
+                setFirebaseStatus(message, false);
+            }
+        }
+
+        startFirebaseSync();
     </script>
 
     <!-- Application JavaScript Logic -->
@@ -488,6 +601,23 @@
             'emerald': { badgeBg: 'bg-emerald-500/20', badgeText: 'text-emerald-400', borderColor: 'border-emerald-500/40', icon: 'trending-up' },
             'blue': { badgeBg: 'bg-blue-500/20', badgeText: 'text-blue-400', borderColor: 'border-blue-500/40', icon: 'layers' },
             'amber': { badgeBg: 'bg-amber-500/20', badgeText: 'text-amber-400', borderColor: 'border-amber-500/40', icon: 'activity' }
+        };
+
+        // Apply realtime cloud updates without changing the existing UI structure.
+        window.applyFirebasePortfolio = function(data) {
+            if (!data || typeof data !== 'object') return;
+            if (Array.isArray(data.trades)) trades = data.trades;
+            if (data.stocksCatalog && typeof data.stocksCatalog === 'object') {
+                stocksCatalog = { ...stocksCatalog, ...data.stocksCatalog };
+            }
+            localStorage.setItem('multi_stock_trades', JSON.stringify(trades));
+            localStorage.setItem('multi_stock_catalog', JSON.stringify(stocksCatalog));
+            if (document.readyState !== 'loading' || document.getElementById('stock-cards-container')) {
+                renderStockSelectorOptions();
+                renderFilterTabs();
+                renderStockCards();
+                calculatePortfolio();
+            }
         };
 
         // Initialize App on Window Load
@@ -955,6 +1085,7 @@
         // LocalStorage Logic
         function saveCustomStocksToStorage() {
             localStorage.setItem('multi_stock_catalog', JSON.stringify(stocksCatalog));
+            if (typeof window.savePortfolioToFirebase === 'function') window.savePortfolioToFirebase();
         }
 
         function loadCustomStocksFromStorage() {
@@ -969,6 +1100,7 @@
 
         function saveTradesToStorage() {
             localStorage.setItem('multi_stock_trades', JSON.stringify(trades));
+            if (typeof window.savePortfolioToFirebase === 'function') window.savePortfolioToFirebase();
         }
 
         function loadTradesFromStorage() {
