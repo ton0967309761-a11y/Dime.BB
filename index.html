@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="th" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Stock Portfolio Tracker (TSLA & IREN)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            dark: '#0a0a0c',
+                            card: '#13131a',
+                            border: '#22222e',
+                            red: '#e82127',
+                            purple: '#8b5cf6',
+                            emerald: '#10b981'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Kanit', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Kanit', 'Inter', sans-serif;
+            background-color: #070709;
+            color: #f3f4f6;
+        }
+        .glass-card {
+            background: rgba(19, 19, 26, 0.75);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+        .glass-card-hover {
+            transition: all 0.2s ease-in-out;
+        }
+        .glass-card-hover:hover {
+            border-color: rgba(255, 255, 255, 0.18);
+            transform: translateY(-2px);
+        }
+        .pulse-live {
+            box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            animation: pulse-green 2s infinite;
+        }
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f0f15;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2a2a3a;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen pb-16">
+
+    <!-- Navbar Header -->
+    <header class="sticky top-0 z-40 glass-card border-b border-brand-border px-4 py-3 mb-6">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-red-600 via-purple-600 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-purple-900/30">
+                    <i data-lucide="line-chart" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="text-base font-bold tracking-wide text-white flex items-center gap-2">
+                        US Stock Investment Tracker
+                    </h1>
+                    <p class="text-xs text-gray-400">ระบบบันทึกพอร์ตการลงทุนหลายหุ้น (TSLA, IREN, ฯลฯ)</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button onclick="toggleAddStockModal()" class="text-xs bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>เพิ่มหุ้นตัวใหม่</span>
+                </button>
+                <button onclick="toggleGithubModal()" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 flex items-center gap-1.5 transition">
+                    <i data-lucide="github" class="w-4 h-4"></i>
+                    <span class="hidden sm:inline">วิธีขึ้น GitHub</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 space-y-6">
+
+        <!-- 1. Portfolio Overall Summary Banner -->
+        <section class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            <!-- Main Total Value Card -->
+            <div class="glass-card lg:col-span-2 rounded-2xl p-6 relative overflow-hidden flex flex-col justify-between">
+                <div class="absolute -right-12 -top-12 w-48 h-48 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-medium text-gray-400 flex items-center gap-1.5">
+                            <i data-lucide="wallet" class="w-4 h-4 text-purple-400"></i>
+                            มูลค่าพอร์ตรวมทั้งหมด (Total Portfolio Value)
+                        </span>
+                        <span class="text-[11px] text-gray-500 font-mono">1 USD = <span id="fx-rate-display">35.00</span> THB</span>
+                    </div>
+                    
+                    <div class="flex items-baseline gap-3">
+                        <span class="text-3xl md:text-4xl font-extrabold text-white font-mono tracking-tight" id="port-total-val-thb">฿0.00</span>
+                        <span class="text-lg md:text-xl text-gray-400 font-mono" id="port-total-val-usd">$0.00</span>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-gray-800/80 grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-xs text-gray-400">ต้นทุนรวม (Total Cost)</p>
+                        <p class="text-lg font-bold font-mono text-gray-200" id="port-total-cost-thb">฿0.00</p>
+                        <p class="text-xs text-gray-500 font-mono" id="port-total-cost-usd">$0.00</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400">กำไร/ขาดทุน รวม (P&L)</p>
+                        <p class="text-lg font-bold font-mono text-gray-200" id="port-total-pnl-thb">฿0.00</p>
+                        <p class="text-xs font-mono font-medium" id="port-total-pnl-percent">+0.00%</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Asset Allocation Breakdown -->
+            <div class="glass-card rounded-2xl p-5 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-xs font-medium text-gray-400 mb-3 flex items-center justify-between">
+                        <span>สัดส่วนถือครอง (Allocation %)</span>
+                        <i data-lucide="pie-chart" class="w-4 h-4 text-gray-500"></i>
+                    </h3>
+                    <div id="allocation-bars" class="space-y-3">
+                        <!-- Allocation Bars Dynamic -->
+                    </div>
+                </div>
+                <div class="text-[11px] text-gray-500 mt-2">
+                    คำนวณจากมูลค่าปัจจุบันตามราคาตลาด
+                </div>
+            </div>
+
+            <!-- Market Controls & Refresh Status -->
+            <div class="glass-card rounded-2xl p-5 flex flex-col justify-between space-y-4">
+                <div>
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 pulse-live"></span>
+                            Live Market Status
+                        </span>
+                        <span class="text-[10px] text-gray-500" id="last-update-time">--:--:--</span>
+                    </div>
+                    <p class="text-xs text-gray-400 leading-relaxed">
+                        ระบบทำการอัปเดตราคาตลาดจำลองและแปลงค่าเงินบาทเรียลไทม์
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <button onclick="fetchRealTimePrices()" class="w-full bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-2 transition border border-gray-700">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-purple-400"></i> รีเฟรชราคาเรียลไทม์
+                    </button>
+                    <button onclick="togglePriceSimulation()" id="sim-btn" class="w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs py-2 px-3 rounded-xl transition">
+                        จำลองราคาผันผวน: ON
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. Individual Stock Live Cards Grid -->
+        <section>
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-sm font-semibold text-gray-300 flex items-center gap-2">
+                    <i data-lucide="layout-grid" class="w-4 h-4 text-purple-400"></i>
+                    ราคาหุ้นในพอร์ต (Stock Watchlist)
+                </h2>
+                <span class="text-xs text-gray-500">คลิกที่การ์ดเพื่อกรองประวัติการซื้อ</span>
+            </div>
+
+            <div id="stock-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Stock Cards (TSLA, IREN, etc.) populated dynamically -->
+            </div>
+        </section>
+
+        <!-- 3. Main Operational Section: Form & Transaction Table -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Transaction Form Card -->
+            <div class="glass-card rounded-2xl p-5 lg:col-span-1 h-fit space-y-4">
+                <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                    <i data-lucide="plus-circle" class="w-5 h-5 text-indigo-400"></i>
+                    บันทึกการซื้อหุ้น
+                </h2>
+
+                <form id="add-trade-form" onsubmit="handleAddTrade(event)" class="space-y-4">
+                    <!-- Stock Selector -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-300 mb-1">เลือกหุ้นที่ซื้อ</label>
+                        <select id="form-stock-ticker" required onchange="handleStockSelectChange()" class="w-full bg-black/50 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono">
+                            <!-- Stock options populated dynamically -->
+                        </select>
+                    </div>
+
+                    <!-- Currency Mode Input -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-300 mb-1">สกุลเงินที่กรอกซื้อ</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="cursor-pointer border border-gray-700 bg-black/30 rounded-xl p-2.5 text-center flex items-center justify-center gap-2 text-xs font-medium has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/10 has-[:checked]:text-indigo-400">
+                                <input type="radio" name="input_currency" value="THB" checked onchange="toggleCurrencyMode()" class="hidden">
+                                <span>บาท (THB)</span>
+                            </label>
+                            <label class="cursor-pointer border border-gray-700 bg-black/30 rounded-xl p-2.5 text-center flex items-center justify-center gap-2 text-xs font-medium has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/10 has-[:checked]:text-indigo-400">
+                                <input type="radio" name="input_currency" value="USD" onchange="toggleCurrencyMode()" class="hidden">
+                                <span>ดอลลาร์ ($USD)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Invest Amount -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-300 mb-1" id="amount-label">จำนวนเงินที่ลงทุน (บาท)</label>
+                        <input type="number" step="any" id="invest-amount" required placeholder="เช่น 5000" class="w-full bg-black/50 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono">
+                    </div>
+
+                    <!-- Buy Price USD -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-300 mb-1">ราคาหุ้นที่ซื้อ ($USD ต่อหุ้น)</label>
+                        <div class="relative">
+                            <input type="number" step="any" id="buy-price" required placeholder="เช่น 25.43" class="w-full bg-black/50 border border-gray-700 rounded-xl pl-3 pr-24 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono">
+                            <button type="button" onclick="fillCurrentStockPrice()" class="absolute right-1 top-1 bottom-1 px-2.5 text-[10px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg border border-gray-700 transition">
+                                ราคาปัจจุบัน
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Trade Date -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-300 mb-1">วันที่ซื้อ</label>
+                        <input type="date" id="trade-date" required class="w-full bg-black/50 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                    </div>
+
+                    <!-- Note -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-300 mb-1">บันทึกเพิ่มเติม (ถ้ามี)</label>
+                        <input type="text" id="trade-note" placeholder="เช่น DCA ประจำเดือน" class="w-full bg-black/50 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                    </div>
+
+                    <!-- Calculated Shares Output Preview -->
+                    <div class="bg-gray-900/90 p-3 rounded-xl border border-gray-800 space-y-1">
+                        <div class="flex justify-between text-xs text-gray-400">
+                            <span>จะได้รับหุ้นประมาณ:</span>
+                            <span class="font-mono text-emerald-400 font-bold" id="calculated-shares">0.0000 หุ้น</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-purple-500 text-white font-medium py-2.5 rounded-xl shadow-lg shadow-indigo-600/25 transition duration-200 flex items-center justify-center gap-2 text-sm">
+                        <i data-lucide="plus" class="w-4 h-4"></i> บันทึกรายการ
+                    </button>
+                </form>
+            </div>
+
+            <!-- Transactions Table Card -->
+            <div class="glass-card rounded-2xl p-5 lg:col-span-2 flex flex-col justify-between">
+                <div>
+                    <!-- Filter Tabs & Table Header -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-gray-800">
+                        <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                            <i data-lucide="history" class="w-5 h-5 text-gray-400"></i>
+                            ประวัติการซื้อขาย
+                        </h2>
+
+                        <!-- Stock Filter Tabs -->
+                        <div class="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-gray-800 overflow-x-auto" id="filter-tabs">
+                            <!-- Filter Tabs Populated Dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Table Container -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="text-[11px] font-medium text-gray-400 border-b border-gray-800 uppercase tracking-wider">
+                                    <th class="py-2.5 px-3">หุ้น</th>
+                                    <th class="py-2.5 px-3">วันที่</th>
+                                    <th class="py-2.5 px-3">เงินที่ซื้อ</th>
+                                    <th class="py-2.5 px-3">ราคาซื้อ ($)</th>
+                                    <th class="py-2.5 px-3">จำนวนหุ้น</th>
+                                    <th class="py-2.5 px-3">กำไร / ขาดทุน</th>
+                                    <th class="py-2.5 px-3 text-right">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trades-table-body" class="divide-y divide-gray-800/50 text-xs font-mono">
+                                <!-- Data rows inserted dynamically -->
+                            </tbody>
+                        </table>
+
+                        <!-- Empty State -->
+                        <div id="empty-state" class="text-center py-12 text-gray-500 space-y-2">
+                            <i data-lucide="inbox" class="w-10 h-10 mx-auto text-gray-600"></i>
+                            <p class="text-sm">ยังไม่มีรายการบันทึกซื้อหุ้นในหมวดหมู่นี้</p>
+                            <p class="text-xs text-gray-600">เลือกหุ้นและกรอกฟอร์มทางด้านซ้ายเพื่อเริ่มบันทึก</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-t border-gray-800 text-[11px] text-gray-500 flex justify-between items-center">
+                    <span>* บันทึกข้อมูลลงใน LocalStorage ของอุปกรณ์โดยอัตโนมัติ</span>
+                    <button onclick="clearAllData()" class="text-gray-500 hover:text-red-400 flex items-center gap-1 transition">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> ล้างข้อมูลทั้งหมด
+                    </button>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Modal 1: Add Custom Stock Modal -->
+    <div id="add-stock-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card bg-gray-900 border border-gray-700 rounded-2xl max-w-md w-full p-6 space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="plus-circle" class="w-5 h-5 text-indigo-400"></i>
+                    เพิ่มสัญลักษณ์หุ้นตัวใหม่ (Add Custom Ticker)
+                </h3>
+                <button onclick="toggleAddStockModal()" class="text-gray-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="add-stock-form" onsubmit="handleAddCustomStock(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-300 mb-1">สัญลักษณ์หุ้น (Ticker Symbol)</label>
+                    <input type="text" id="new-ticker" required uppercase placeholder="เช่น NVDA, AAPL, PLTR" class="w-full bg-black/50 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white uppercase focus:outline-none focus:border-indigo-500 font-mono">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-300 mb-1">ชื่อเต็มบริษัท (Company Name)</label>
+                    <input type="text" id="new-stock-name" required placeholder="เช่น NVIDIA Corporation" class="w-full bg-black/50 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-300 mb-1">ราคาปัจจุบันเริ่มต้น ($USD)</label>
+                    <input type="number" step="any" id="new-stock-price" required placeholder="เช่น 140.50" class="w-full bg-black/50 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-gray-300 mb-1">ธีมสีสัญลักษณ์</label>
+                    <select id="new-stock-color" class="w-full bg-black/50 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                        <option value="emerald">Emerald Green (เขียวสด)</option>
+                        <option value="purple">Purple (ม่วง)</option>
+                        <option value="blue">Blue (น้ำเงิน)</option>
+                        <option value="amber">Amber/Orange (ส้ม/ทอง)</option>
+                        <option value="red">Red (แดง)</option>
+                    </select>
+                </div>
+
+                <div class="pt-2 flex justify-end gap-2">
+                    <button type="button" onclick="toggleAddStockModal()" class="px-4 py-2 text-xs bg-gray-800 text-gray-300 rounded-xl hover:bg-gray-700">ยกเลิก</button>
+                    <button type="submit" class="px-4 py-2 text-xs bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 font-medium">เพิ่มหุ้นในพอร์ต</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 2: GitHub Pages Deployment Manual -->
+    <div id="github-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-card bg-gray-900 border border-gray-700 rounded-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                    <i data-lucide="github" class="w-5 h-5 text-white"></i>
+                    วิธินำไฟล์นี้ไปเปิดใช้ผ่าน GitHub Pages ฟรี!
+                </h3>
+                <button onclick="toggleGithubModal()" class="text-gray-400 hover:text-white">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <ol class="list-decimal list-inside space-y-3 text-sm text-gray-300 leading-relaxed">
+                <li class="pl-2">
+                    <strong class="text-white">สร้างไฟล์ index.html:</strong> คัดลอกโค้ดทั้งหมดในหน้านี้ แล้วตั้งชื่อไฟล์ว่า <code class="bg-black/60 text-indigo-400 px-1.5 py-0.5 rounded">index.html</code>
+                </li>
+                <li class="pl-2">
+                    <strong class="text-white">สร้าง Repository บน GitHub:</strong> ไปที่ <a href="https://github.com" target="_blank" class="text-emerald-400 underline">GitHub.com</a> คลิก <span class="text-white bg-gray-800 px-1.5 py-0.5 rounded border border-gray-700">+ New Repository</span>
+                </li>
+                <li class="pl-2">
+                    <strong class="text-white">อัปโหลดไฟล์:</strong> ตั้งชื่อโฟลเดอร์ เช่น <code class="bg-black/60 text-emerald-400 px-1.5 py-0.5 rounded">my-stocks-tracker</code> ตั้งเป็น <i>Public</i> แล้วกด Create -> ลากไฟล์ <code class="text-indigo-400">index.html</code> เข้าไปวาง
+                </li>
+                <li class="pl-2">
+                    <strong class="text-white">เปิดใช้ GitHub Pages:</strong>
+                    <ul class="list-disc list-inside pl-5 mt-1 space-y-1 text-gray-400 text-xs">
+                        <li>ไปที่แถบ <b>Settings</b> ของ Repository นั้น</li>
+                        <li>เลือกเมนู <b>Pages</b> ด้านซ้ายมือ</li>
+                        <li>ตรง <i>Branch</i> ให้เลือกเป็น <code class="text-white">main</code> (หรือ master) แล้วกด <b>Save</b></li>
+                    </ul>
+                </li>
+                <li class="pl-2">
+                    <strong class="text-white">พร้อมใช้งาน:</strong> รอประมาณ 1 นาที จะได้ URL เว็บไซต์ฟรี นำไปเปิดติดตามราคาหุ้นบนมือถือได้ทันทีตลอดเวลา!
+                </li>
+            </ol>
+
+            <div class="pt-2 flex justify-end">
+                <button onclick="toggleGithubModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2 rounded-xl font-medium">
+                    รับทราบ
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application JavaScript Logic -->
+    <script>
+        // State Management
+        let usdToThbRate = 35.00;
+        let selectedFilterStock = 'ALL'; // 'ALL', 'TSLA', 'IREN', etc.
+        let isSimulationOn = true;
+        let simInterval = null;
+
+        // Default Supported Stocks Catalog (TSLA & IREN as default)
+        let stocksCatalog = {
+            'TSLA': {
+                ticker: 'TSLA',
+                name: 'Tesla, Inc.',
+                priceUSD: 391.62,
+                color: 'red',
+                badgeBg: 'bg-red-500/20',
+                badgeText: 'text-red-400',
+                borderColor: 'border-red-500/40',
+                icon: 'zap'
+            },
+            'IREN': {
+                ticker: 'IREN',
+                name: 'IREN Limited',
+                priceUSD: 25.43,
+                color: 'purple',
+                badgeBg: 'bg-purple-500/20',
+                badgeText: 'text-purple-400',
+                borderColor: 'border-purple-500/40',
+                icon: 'cpu'
+            }
+        };
+
+        // User Trades List
+        let trades = [];
+
+        // Color helper map
+        const colorStyleMap = {
+            'red': { badgeBg: 'bg-red-500/20', badgeText: 'text-red-400', borderColor: 'border-red-500/40', icon: 'zap' },
+            'purple': { badgeBg: 'bg-purple-500/20', badgeText: 'text-purple-400', borderColor: 'border-purple-500/40', icon: 'cpu' },
+            'emerald': { badgeBg: 'bg-emerald-500/20', badgeText: 'text-emerald-400', borderColor: 'border-emerald-500/40', icon: 'trending-up' },
+            'blue': { badgeBg: 'bg-blue-500/20', badgeText: 'text-blue-400', borderColor: 'border-blue-500/40', icon: 'layers' },
+            'amber': { badgeBg: 'bg-amber-500/20', badgeText: 'text-amber-400', borderColor: 'border-amber-500/40', icon: 'activity' }
+        };
+
+        // Initialize App on Window Load
+        window.onload = function() {
+            document.getElementById('trade-date').valueAsDate = new Date();
+
+            // Load saved catalog & trades from LocalStorage
+            loadCustomStocksFromStorage();
+            loadTradesFromStorage();
+
+            // Initialize Stock Select & Filter Tabs
+            renderStockSelectorOptions();
+            renderFilterTabs();
+
+            // Render Watchlist Cards
+            renderStockCards();
+
+            // Initial Calculations
+            calculatePortfolio();
+
+            // Event Listeners for Live Share Calculations
+            document.getElementById('invest-amount').addEventListener('input', updateCalculatedShares);
+            document.getElementById('buy-price').addEventListener('input', updateCalculatedShares);
+
+            // Simulation loop
+            startPriceSimulation();
+
+            // Lucide Icons Render
+            lucide.createIcons();
+        };
+
+        // Render Stock Cards (Grid)
+        function renderStockCards() {
+            const container = document.getElementById('stock-cards-container');
+            container.innerHTML = '';
+
+            Object.keys(stocksCatalog).forEach(ticker => {
+                const stock = stocksCatalog[ticker];
+                const priceTHB = stock.priceUSD * usdToThbRate;
+                
+                // Calculate stock specific holding
+                let stockHoldingShares = 0;
+                let stockHoldingCostUSD = 0;
+
+                trades.filter(t => t.ticker === ticker).forEach(t => {
+                    stockHoldingShares += t.shares;
+                    stockHoldingCostUSD += t.amountUSD;
+                });
+
+                const stockCurrentValUSD = stockHoldingShares * stock.priceUSD;
+                const stockPnLUSD = stockCurrentValUSD - stockHoldingCostUSD;
+                const stockPnLPercent = stockHoldingCostUSD > 0 ? (stockPnLUSD / stockHoldingCostUSD) * 100 : 0;
+                const isProfit = stockPnLUSD >= 0;
+
+                const card = document.createElement('div');
+                card.className = `glass-card glass-card-hover rounded-2xl p-5 cursor-pointer relative overflow-hidden border ${stock.borderColor || 'border-gray-800'}`;
+                card.onclick = () => filterByStock(ticker);
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg ${stock.badgeBg} ${stock.badgeText} flex items-center justify-center font-bold">
+                                <i data-lucide="${stock.icon || 'activity'}" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-sm font-bold text-white tracking-wide">${stock.ticker}</h3>
+                                <p class="text-[11px] text-gray-400 truncate max-w-[120px]">${stock.name}</p>
+                            </div>
+                        </div>
+                        <span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${stock.badgeBg} ${stock.badgeText} font-mono font-medium">
+                            NASDAQ
+                        </span>
+                    </div>
+
+                    <div class="flex items-baseline justify-between mt-2">
+                        <div>
+                            <span class="text-2xl font-bold font-mono text-white">$${stock.priceUSD.toFixed(2)}</span>
+                            <span class="text-xs text-gray-400 font-mono ml-1">≈ ฿${priceTHB.toLocaleString('th-TH', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
+                    </div>
+
+                    <!-- Holding Summary Pill -->
+                    <div class="mt-4 pt-3 border-t border-gray-800/60 flex justify-between items-center text-xs">
+                        <span class="text-gray-400">ถือครอง: <b class="text-gray-200 font-mono">${stockHoldingShares.toFixed(4)}</b></span>
+                        ${stockHoldingCostUSD > 0 ? `
+                            <span class="font-mono font-bold ${isProfit ? 'text-emerald-400' : 'text-red-400'}">
+                                ${isProfit ? '+' : ''}${stockPnLPercent.toFixed(2)}%
+                            </span>
+                        ` : '<span class="text-gray-500 text-[10px]">ยังไม่มีหุ้นในพอร์ต</span>'}
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+
+            lucide.createIcons();
+        }
+
+        // Render Stock Options in Transaction Form
+        function renderStockSelectorOptions() {
+            const select = document.getElementById('form-stock-ticker');
+            select.innerHTML = '';
+
+            Object.keys(stocksCatalog).forEach(ticker => {
+                const stock = stocksCatalog[ticker];
+                const option = document.createElement('option');
+                option.value = ticker;
+                option.textContent = `${stock.ticker} - ${stock.name}`;
+                select.appendChild(option);
+            });
+
+            handleStockSelectChange();
+        }
+
+        function handleStockSelectChange() {
+            const selectedTicker = document.getElementById('form-stock-ticker').value;
+            if (stocksCatalog[selectedTicker]) {
+                document.getElementById('buy-price').value = stocksCatalog[selectedTicker].priceUSD.toFixed(2);
+                updateCalculatedShares();
+            }
+        }
+
+        function fillCurrentStockPrice() {
+            const selectedTicker = document.getElementById('form-stock-ticker').value;
+            if (stocksCatalog[selectedTicker]) {
+                document.getElementById('buy-price').value = stocksCatalog[selectedTicker].priceUSD.toFixed(2);
+                updateCalculatedShares();
+            }
+        }
+
+        // Render Filter Tabs above Transactions Table
+        function renderFilterTabs() {
+            const container = document.getElementById('filter-tabs');
+            container.innerHTML = '';
+
+            const allTab = document.createElement('button');
+            allTab.className = `px-3 py-1 rounded-lg text-xs font-medium transition whitespace-nowrap ${selectedFilterStock === 'ALL' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`;
+            allTab.textContent = 'ทั้งหมด (ALL)';
+            allTab.onclick = () => filterByStock('ALL');
+            container.appendChild(allTab);
+
+            Object.keys(stocksCatalog).forEach(ticker => {
+                const tab = document.createElement('button');
+                tab.className = `px-3 py-1 rounded-lg text-xs font-medium transition whitespace-nowrap ${selectedFilterStock === ticker ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`;
+                tab.textContent = ticker;
+                tab.onclick = () => filterByStock(ticker);
+                container.appendChild(tab);
+            });
+        }
+
+        function filterByStock(ticker) {
+            selectedFilterStock = ticker;
+            renderFilterTabs();
+            renderTradesTable();
+        }
+
+        // Add Custom Stock Ticker Form Submit
+        function handleAddCustomStock(e) {
+            e.preventDefault();
+
+            const ticker = document.getElementById('new-ticker').value.trim().toUpperCase();
+            const name = document.getElementById('new-stock-name').value.trim();
+            const priceUSD = parseFloat(document.getElementById('new-stock-price').value);
+            const color = document.getElementById('new-stock-color').value;
+
+            if (!ticker || !name || isNaN(priceUSD)) return;
+
+            const colorStyle = colorStyleMap[color] || colorStyleMap['emerald'];
+
+            stocksCatalog[ticker] = {
+                ticker,
+                name,
+                priceUSD,
+                color,
+                ...colorStyle
+            };
+
+            saveCustomStocksToStorage();
+            renderStockSelectorOptions();
+            renderFilterTabs();
+            renderStockCards();
+            calculatePortfolio();
+
+            document.getElementById('add-stock-form').reset();
+            toggleAddStockModal();
+        }
+
+        // Price Fluctuations Simulation
+        function startPriceSimulation() {
+            if (simInterval) clearInterval(simInterval);
+            simInterval = setInterval(() => {
+                if (isSimulationOn) {
+                    Object.keys(stocksCatalog).forEach(ticker => {
+                        const shiftPercent = (Math.random() - 0.49) * 0.008; // -0.4% to +0.4%
+                        stocksCatalog[ticker].priceUSD = Math.max(1, stocksCatalog[ticker].priceUSD * (1 + shiftPercent));
+                    });
+                    updatePricesUI();
+                }
+            }, 3000);
+        }
+
+        function fetchRealTimePrices() {
+            // Simulated minor refresh pulse
+            Object.keys(stocksCatalog).forEach(ticker => {
+                const shiftPercent = (Math.random() - 0.48) * 0.005;
+                stocksCatalog[ticker].priceUSD = Math.max(1, stocksCatalog[ticker].priceUSD * (1 + shiftPercent));
+            });
+            updatePricesUI();
+        }
+
+        function togglePriceSimulation() {
+            isSimulationOn = !isSimulationOn;
+            const btn = document.getElementById('sim-btn');
+            if (isSimulationOn) {
+                btn.textContent = "จำลองราคาผันผวน: ON";
+                btn.className = "w-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs py-2 px-3 rounded-xl transition";
+            } else {
+                btn.textContent = "จำลองราคาผันผวน: OFF";
+                btn.className = "w-full bg-gray-800 hover:bg-gray-700 text-gray-400 border border-gray-700 text-xs py-2 px-3 rounded-xl transition";
+            }
+        }
+
+        function updatePricesUI() {
+            document.getElementById('last-update-time').textContent = new Date().toLocaleTimeString('th-TH');
+            renderStockCards();
+            calculatePortfolio();
+        }
+
+        // Calculations & Allocation Rendering
+        function calculatePortfolio() {
+            let totalCostUSD = 0;
+            let totalCostTHB = 0;
+            let totalCurrentValUSD = 0;
+
+            const stockValuesMap = {};
+
+            // Calculate valuation for each trade
+            trades.forEach(trade => {
+                totalCostUSD += trade.amountUSD;
+                totalCostTHB += trade.amountTHB;
+
+                const currentStockPrice = stocksCatalog[trade.ticker] ? stocksCatalog[trade.ticker].priceUSD : trade.buyPriceUSD;
+                const tradeCurrentValUSD = trade.shares * currentStockPrice;
+
+                totalCurrentValUSD += tradeCurrentValUSD;
+
+                if (!stockValuesMap[trade.ticker]) stockValuesMap[trade.ticker] = 0;
+                stockValuesMap[trade.ticker] += tradeCurrentValUSD;
+            });
+
+            const totalCurrentValTHB = totalCurrentValUSD * usdToThbRate;
+            const totalPnLUSD = totalCurrentValUSD - totalCostUSD;
+            const totalPnLTHB = totalCurrentValTHB - totalCostTHB;
+            const totalPnLPercent = totalCostUSD > 0 ? (totalPnLUSD / totalCostUSD) * 100 : 0;
+
+            // DOM Updates Summary
+            document.getElementById('port-total-val-thb').textContent = `฿${totalCurrentValTHB.toLocaleString('th-TH', {maximumFractionDigits: 0})}`;
+            document.getElementById('port-total-val-usd').textContent = `$${totalCurrentValUSD.toFixed(2)}`;
+
+            document.getElementById('port-total-cost-thb').textContent = `฿${totalCostTHB.toLocaleString('th-TH', {maximumFractionDigits: 0})}`;
+            document.getElementById('port-total-cost-usd').textContent = `$${totalCostUSD.toFixed(2)}`;
+
+            const pnlTHBElem = document.getElementById('port-total-pnl-thb');
+            const pnlPercentElem = document.getElementById('port-total-pnl-percent');
+
+            const isProfit = totalPnLUSD >= 0;
+            const sign = isProfit ? '+' : '';
+
+            pnlTHBElem.textContent = `${sign}฿${Math.abs(totalPnLTHB).toLocaleString('th-TH', {maximumFractionDigits: 0})}`;
+            pnlPercentElem.textContent = `${sign}${totalPnLPercent.toFixed(2)}% (${sign}$${Math.abs(totalPnLUSD).toFixed(2)})`;
+
+            if (isProfit) {
+                pnlTHBElem.className = "text-lg font-bold font-mono text-emerald-400";
+                pnlPercentElem.className = "text-xs font-mono font-medium text-emerald-400";
+            } else {
+                pnlTHBElem.className = "text-lg font-bold font-mono text-red-400";
+                pnlPercentElem.className = "text-xs font-mono font-medium text-red-400";
+            }
+
+            // Allocation Breakdown Bar Render
+            renderAllocationBars(stockValuesMap, totalCurrentValUSD);
+
+            // Re-render Transactions Table
+            renderTradesTable();
+        }
+
+        function renderAllocationBars(stockValuesMap, totalValUSD) {
+            const container = document.getElementById('allocation-bars');
+            container.innerHTML = '';
+
+            if (totalValUSD <= 0) {
+                container.innerHTML = `<p class="text-xs text-gray-500 py-4 text-center">ยังไม่มีข้อมูลการซื้อหุ้นในพอร์ต</p>`;
+                return;
+            }
+
+            Object.keys(stockValuesMap).forEach(ticker => {
+                const valUSD = stockValuesMap[ticker];
+                const percentage = (valUSD / totalValUSD) * 100;
+                const stock = stocksCatalog[ticker] || { color: 'purple', badgeBg: 'bg-purple-500' };
+
+                const barItem = document.createElement('div');
+                barItem.className = 'space-y-1';
+
+                barItem.innerHTML = `
+                    <div class="flex justify-between text-xs font-mono">
+                        <span class="text-gray-300 font-bold">${ticker}</span>
+                        <span class="text-gray-400">${percentage.toFixed(1)}% ($${valUSD.toFixed(0)})</span>
+                    </div>
+                    <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-indigo-500 to-purple-500" style="width: ${percentage}%"></div>
+                    </div>
+                `;
+
+                container.appendChild(barItem);
+            });
+        }
+
+        // Auto Calculate Shares Preview in Form
+        function updateCalculatedShares() {
+            const amount = parseFloat(document.getElementById('invest-amount').value) || 0;
+            const buyPrice = parseFloat(document.getElementById('buy-price').value) || 0;
+            const currencyMode = document.querySelector('input[name="input_currency"]:checked').value;
+
+            if (amount <= 0 || buyPrice <= 0) {
+                document.getElementById('calculated-shares').textContent = '0.0000 หุ้น';
+                return;
+            }
+
+            let amountInUSD = currencyMode === 'THB' ? (amount / usdToThbRate) : amount;
+            let shares = amountInUSD / buyPrice;
+
+            document.getElementById('calculated-shares').textContent = `${shares.toFixed(4)} หุ้น`;
+        }
+
+        function toggleCurrencyMode() {
+            const mode = document.querySelector('input[name="input_currency"]:checked').value;
+            const label = document.getElementById('amount-label');
+            label.textContent = mode === 'THB' ? 'จำนวนเงินที่ลงทุน (บาท)' : 'จำนวนเงินที่ลงทุน ($USD)';
+            updateCalculatedShares();
+        }
+
+        // Submit Trade Record
+        function handleAddTrade(e) {
+            e.preventDefault();
+
+            const ticker = document.getElementById('form-stock-ticker').value;
+            const currency = document.querySelector('input[name="input_currency"]:checked').value;
+            const investAmount = parseFloat(document.getElementById('invest-amount').value);
+            const buyPriceUSD = parseFloat(document.getElementById('buy-price').value);
+            const date = document.getElementById('trade-date').value;
+            const note = document.getElementById('trade-note').value;
+
+            let amountUSD = currency === 'THB' ? (investAmount / usdToThbRate) : investAmount;
+            let amountTHB = currency === 'THB' ? investAmount : (investAmount * usdToThbRate);
+            let shares = amountUSD / buyPriceUSD;
+
+            const newTrade = {
+                id: Date.now(),
+                ticker,
+                date,
+                currencyInput: currency,
+                investAmount,
+                amountUSD,
+                amountTHB,
+                buyPriceUSD,
+                shares,
+                note
+            };
+
+            trades.push(newTrade);
+            saveTradesToStorage();
+            calculatePortfolio();
+
+            // Reset Form inputs
+            document.getElementById('invest-amount').value = '';
+            document.getElementById('trade-note').value = '';
+            document.getElementById('trade-date').valueAsDate = new Date();
+            updateCalculatedShares();
+        }
+
+        function deleteTrade(id) {
+            trades = trades.filter(t => t.id !== id);
+            saveTradesToStorage();
+            calculatePortfolio();
+        }
+
+        function clearAllData() {
+            if (confirm('คุณแน่ใจหรือไม่ว่าต้องการลบประวัติรายการซื้อขายทั้งหมด?')) {
+                trades = [];
+                saveTradesToStorage();
+                calculatePortfolio();
+            }
+        }
+
+        // Render Table
+        function renderTradesTable() {
+            const tbody = document.getElementById('trades-table-body');
+            const emptyState = document.getElementById('empty-state');
+
+            tbody.innerHTML = '';
+
+            const filteredTrades = selectedFilterStock === 'ALL' 
+                ? trades 
+                : trades.filter(t => t.ticker === selectedFilterStock);
+
+            if (filteredTrades.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            // Sort Descending Date
+            filteredTrades.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            filteredTrades.forEach(trade => {
+                const currentStockPrice = stocksCatalog[trade.ticker] ? stocksCatalog[trade.ticker].priceUSD : trade.buyPriceUSD;
+                const currentValUSD = trade.shares * currentStockPrice;
+                const pnlUSD = currentValUSD - trade.amountUSD;
+                const pnlPercent = (pnlUSD / trade.amountUSD) * 100;
+                const isProfit = pnlUSD >= 0;
+
+                const stockObj = stocksCatalog[trade.ticker] || { badgeBg: 'bg-gray-800', badgeText: 'text-gray-300' };
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-white/5 transition border-b border-gray-800/40';
+
+                tr.innerHTML = `
+                    <td class="py-3 px-3">
+                        <span class="px-2 py-0.5 rounded text-[11px] font-bold ${stockObj.badgeBg} ${stockObj.badgeText}">
+                            ${trade.ticker}
+                        </span>
+                    </td>
+                    <td class="py-3 px-3 text-gray-300">
+                        <div>${trade.date}</div>
+                        <div class="text-[10px] text-gray-500">${trade.note || '-'}</div>
+                    </td>
+                    <td class="py-3 px-3">
+                        <div class="text-white">฿${trade.amountTHB.toLocaleString('th-TH', {maximumFractionDigits: 0})}</div>
+                        <div class="text-[10px] text-gray-500">$${trade.amountUSD.toFixed(2)}</div>
+                    </td>
+                    <td class="py-3 px-3 text-gray-200">$${trade.buyPriceUSD.toFixed(2)}</td>
+                    <td class="py-3 px-3 font-bold text-emerald-400">${trade.shares.toFixed(4)}</td>
+                    <td class="py-3 px-3">
+                        <div class="${isProfit ? 'text-emerald-400' : 'text-red-400'} font-bold">
+                            ${isProfit ? '+' : ''}${pnlPercent.toFixed(2)}%
+                        </div>
+                        <div class="text-[10px] ${isProfit ? 'text-emerald-500/70' : 'text-red-500/70'}">
+                            ${isProfit ? '+' : ''}$${pnlUSD.toFixed(2)}
+                        </div>
+                    </td>
+                    <td class="py-3 px-3 text-right">
+                        <button onclick="deleteTrade(${trade.id})" class="text-gray-500 hover:text-red-400 p-1 transition">
+                            <i data-lucide="trash" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                `;
+
+                tbody.appendChild(tr);
+            });
+
+            lucide.createIcons();
+        }
+
+        // LocalStorage Logic
+        function saveCustomStocksToStorage() {
+            localStorage.setItem('multi_stock_catalog', JSON.stringify(stocksCatalog));
+        }
+
+        function loadCustomStocksFromStorage() {
+            const stored = localStorage.getItem('multi_stock_catalog');
+            if (stored) {
+                try {
+                    const parsed = JSON.parse(stored);
+                    stocksCatalog = { ...stocksCatalog, ...parsed };
+                } catch (e) {}
+            }
+        }
+
+        function saveTradesToStorage() {
+            localStorage.setItem('multi_stock_trades', JSON.stringify(trades));
+        }
+
+        function loadTradesFromStorage() {
+            const stored = localStorage.getItem('multi_stock_trades');
+            if (stored) {
+                try {
+                    trades = JSON.parse(stored);
+                } catch (e) {
+                    trades = [];
+                }
+            }
+        }
+
+        // Modals Toggle
+        function toggleAddStockModal() {
+            document.getElementById('add-stock-modal').classList.toggle('hidden');
+        }
+
+        function toggleGithubModal() {
+            document.getElementById('github-modal').classList.toggle('hidden');
+        }
+    </script>
+</body>
+</html>
