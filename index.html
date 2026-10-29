@@ -422,6 +422,30 @@
         </div>
     </div>
 
+    <!-- Firebase SDK and Configuration -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
+
+        // Firebase configuration provided by the user
+        const firebaseConfig = {
+          apiKey: "AIzaSyB9yViN00qo07YDc3UzKFqCg3ZylQx8iKo",
+          authDomain: "dimebb.firebaseapp.com",
+          projectId: "dimebb",
+          storageBucket: "dimebb.firebasestorage.app",
+          messagingSenderId: "47618069798",
+          appId: "1:47618069798:web:d8c1c93ca6fdb7b60f5de7",
+          measurementId: "G-XD65GLM211"
+        };
+
+        const firebaseApp = initializeApp(firebaseConfig);
+        try {
+            getAnalytics(firebaseApp);
+        } catch (error) {
+            console.warn("Firebase Analytics is unavailable in this environment.", error);
+        }
+    </script>
+
     <!-- Application JavaScript Logic -->
     <script>
         // State Management
